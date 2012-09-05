@@ -1,0 +1,159 @@
+\# $Id$
+.Dd 4 September, 2012
+.Dt topo 1
+.Os Darwin
+.Sh NAME
+.Nm topo
+.Nd Manage ssh tunnels
+.Sh SYNOPSIS
+.Nm
+.Op Ar subcommand Op Ar arguments ...
+.Sh DESCRIPTION
+.Nm 
+manages
+.Nm ssh
+tunnels from the command line and, optionally, from the scripts menu.
+.Pp
+An 
+.Nm ssh
+tunnel is an
+.Nm ssh
+connection from the local host to an intermediate host that forwards TCP ports from the local host to destinations hosts that are directly accessible from the intermediate host. A typical use of an
+.Nm ssh
+tunnel is to gain convenient access to services on hosts behind a firewall via a bastion host.
+.Pp
+The tunnels managed by 
+.Nm
+are robust, in that once opened, they are reopened after network interruptions or when the computer wakes from sleep. However, they are not persistent, in  that they are not generally preserved from one login to the next. It is, however, possible to open specified tunnels at startup.
+.Pp
+Sometimes it is necessary to use two or more tunnels to reach a destination host, for example, if the destination host is behind two or more firewalls. This situation is handled by
+.Nm
+by allowing one tunnel to depend on another. When a tunnel is opened by
+.Nm ,
+all of its dependencies are opened first.
+.Pp
+.Nm
+mean "mole" in Spanish. It is pronounced more or less like the first two syllables of the English word "topographic".
+.Sh SUBCOMMANDS
+.Bl -tag -width -indent
+.It Xo Ar open
+.Ar tunnelname
+.Xc
+Open the specified tunnel, and any tunnels on which the specified tunnel depends, directly or indirectly.
+.It Xo Ar close
+.Ar tunnelname
+.Xc
+Close the specified tunnel. Closing a tunnel that is already closed is not an error. Closing a tunnel does not close any tunnels on which the tunnel depends, directly or indirectly.
+.It Xo Ar openall
+.Xc
+Open all defined tunnels.
+.It Xo Ar closeall
+.Xc
+Close all defined tunnels.
+.It Xo Ar list
+.Xc
+List all tunnels, together with any dependencies and whether they are configured, currently open, and opened by the
+.Nm startup
+subcommand.
+.It Xo Ar startup
+.Xc
+Open all tunnels whose definitions indicate (by use of the #TunnelOpenAtStartUp keyword) that they should be opened by the
+.Nm startup
+subcommand.
+.It Xo Ar installscripts
+.Xc
+Install scripts to interface to 
+.Nm
+in the scripts menu.
+.El
+.Sh DEFINITIONS
+.Nm
+reads tunnel definitions from the ~/.ssh/config file; they are simply Host sections that refer to hosts with names ending in "-tunnel". Normally a tunnel definition will use a HostName keyword, and perhaps User and Port keywords, to define the intermediate host and use LocalForward keywords to forward ports from the local host to destination hosts.
+.Pp
+Within a tunnel Host section,
+.Nm
+interprets the following keyword-value pairs. Since the keywords all begin with #, they are ignored by 
+.Nm ssh .
+Following 
+.Nm ssh ,
+keywords are case insensitive, but values are case sensitive and can be surrounded by double quotes.
+.Bl -tag -width -indent
+.It Xo Ar #TunnelDependency
+.Ar tunnelname
+.Xc
+The tunnel being defined by this Host section depends on the tunnel named by the #TunnelDependency keyword. Prior to 
+.Nm 
+opening a tunnel, it first opens any tunnel on which that tunnel depends.
+.Pp
+A tunnel may depend on at most one other tunnel directly. That is, there must be at most one #TunnelDependency keyword in each Host section. However, a tunnel that is depended on may in turn depend on another tunnel. Such indirect dependencies are handled correctly by
+.Nm .
+.It Xo Ar #TunnelOpenAtStartUp
+.Ar boolean
+.Xc
+If the value is "yes", the tunnel is opened when 
+.Nm 
+is run with the 
+.Nm startup
+subcommand. The default is "no".
+.El
+.Sh EXAMPLES
+.Pp
+For example, this Host section in ~/.ssh/config defines a tunnel called foo-tunnel through the intermediate host foo that forwards local TCP port 2222 to port 22 (the default ssh port) on destination host bar and local TCP port 8080 to port 80 (the default HTTP port) on destination host baz.
+.Bd -literal -offset indent
+Host foo-tunnel
+  HostName foo
+  LocalForward 2222 bar:22
+  LocalForward 8080 baz:80	
+.Ed
+.Pp
+Once opened (either from the command line or the script), one can connect to bar using
+.Bd -literal -offset indent
+ssh -p 2222 localhost
+.Ed
+.Pp
+and to baz using
+.Bd -literal -offset indent
+open http://localhost:8080/
+.Ed
+.Pp
+The 
+.Nm ssh
+connection can be make more mnemonic by defining another Host section in ~/.ssh/config:
+.Bd -literal -offset indent
+Host bar
+  HostName localhost
+  Port 2222
+.Ed
+.Pp
+and then simply using
+.Bd -literal -offset indent
+ssh bar
+.Ed
+.Pp
+To continue the example, the following Host sections in ~/.ssh/config defines a tunnel called bar-tunnel through the intermediate host bar that forwards local TCP port 2223 to port 22 (the default ssh port) on destination host frob and then the connection to frob available under that name.
+.Bd -literal -offset indent
+Host bar-tunnel
+  HostName localhost
+  Port 2222
+  #TunnelDependency foo-tunnel
+  LocalForward 2223 frob:22
+  
+Host frob
+  HostName localhost
+  Port 2223
+.Ed
+.Pp
+Note that the dependency of bar-tunnel on foo-tunnel is indicated by the #TunnelDependency keyword and value. Thus, when bar-tunnel is opened, foo-tunnel will be automatically opened too. Once bar-tunnel is opened, one can connect to frob using
+.Bd -literal -offset indent
+ssh frob
+.Ed
+.Sh FILES
+.Bl -tag -width "/System/Library/LaunchDaemons" -compact
+.It Pa ~/.ssh/config
+The per-user ssh configuration file. Tunnel definitions are read by 
+.Nm
+from this file.
+.El
+.Sh SEE ALSO 
+.Xr ssh 1 ,
+.Xr ssh_config 5
