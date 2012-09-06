@@ -63,45 +63,65 @@ proc getlines {file} {
   return $lines
 }
 
-proc gethostdict {} {
+proc parsesshconfig {} {
 
-  set hostdict {}
+  global hostdict
+  global localportdict
 
   foreach line [getlines "$::env(HOME)/.ssh/config"] {
-    if {[string equal -nocase [lindex $line 0] "host"]} {
-      set currenthosts [lrange $line 1 end]
-      foreach host $currenthosts {
-        dict set hostdict $host "configured" true
-      }
-      foreach host $currenthosts {
-        switch -glob $host {
-          "*-tunnel" {
-  	    dict set hostdict $host "type" "tunnel"
-  	  }
-          default {
-            dict set hostdict $host "type" "ssh"
+    set keyword [string tolower [lindex $line 0]]
+    switch $keyword {
+      "host" {
+        set currenthosts [lrange $line 1 end]
+        foreach host $currenthosts {
+          dict set hostdict $host "configured" true
+        }
+        foreach host $currenthosts {
+          switch -glob $host {
+            "*-tunnel" {
+  	      dict set hostdict $host "type" "tunnel"
+  	    }
+            default {
+              dict set hostdict $host "type" "ssh"
+            }
           }
         }
       }
-    } elseif {[string equal -nocase [lindex $line 0] "#tunneldependency"]} {
-      foreach host $currenthosts {
-        if {![dict exists $hostdict $host "dependency"]} {
-          dict set hostdict $host "dependency" [lindex $line 1]
+      "hostname" -
+      "port" {
+        foreach host $currenthosts {
+          if {![dict exists $hostdict $host $keyword]} {
+            dict set hostdict $host $keyword [lindex $line 1]
+          }
         }
       }
-    } elseif {[string equal -nocase [lindex $line 0] "#tunnelopenatstartup"] &&
-              [string equal [lindex $line 1] "yes"]} {
-      foreach host $currenthosts {
-        if {![dict exists $hostdict $host "openatstartup"]} {
-          dict set hostdict $host "openatstartup" true
+      "#tunnelopenatstartup" {
+        if {[string equal [lindex $line 1] "yes"]} {
+          foreach host $currenthosts {
+            if {![dict exists $hostdict $host "openatstartup"]} {
+              dict set hostdict $host "openatstartup" true
+            }
+          }
+        } elseif {[string equal [lindex $line 1] "no"]} {
+          foreach host $currenthosts {
+            if {![dict exists $hostdict $host "openatstartup"]} {
+              dict set hostdict $host "openatstartup" false
+            }
+          }
         }
       }
-    } elseif {[string equal -nocase [lindex $line 0] "#tunnelopenatstartup"] &&
-              [string equal [lindex $line 1] "no"]} {
-      foreach host $currenthosts {
-        if {![dict exists $hostdict $host "openatstartup"]} {
-          dict set hostdict $host "openatstartup" false
-        }
+      "localforward" {
+        set localport [lindex $line 1]
+        set remote [split [lindex $line 2] ":"]
+        set remotehost [lindex $remote 0]
+        set remoteport [lindex $remote 1]
+        # Check only one host
+        set host $currenthosts
+        dict set localportdict $localport [dict create \
+          tunnel $host \
+          remotehost $remotehost \
+          remoteport $remoteport \
+        ]
       }
     }
   }
@@ -114,24 +134,31 @@ proc gethostdict {} {
   }
   
   foreach host [dict keys $hostdict] {
-    if {![dict exists $hostdict $host "configured"]} {
-      dict set hostdict $host "configured" false
+    foreach {keyword value} [list \
+      "hostname"      $host \
+      "port"          22 \
+      "configured"    false \
+      "openatstartup" false \
+      "open"          false \
+    ] {
+      if {![dict exists $hostdict $host $keyword]} {
+        dict set hostdict $host $keyword $value
+      }
     }
-    if {![dict exists $hostdict $host "dependency"]} {
-      dict set hostdict $host "dependency" ""
-    }
-    if {![dict exists $hostdict $host "openatstartup"]} {
-      dict set hostdict $host "openatstartup" false
-    }
-    if {![dict exists $hostdict $host "open"]} {
-      dict set hostdict $host "open" false
+    foreach keyword {} {
+      if {![dict exists $hostdict $host $keyword]} {
+        dict set hostdict $host $keyword ""
+      }
     }
   }
   
   return $hostdict
 }
 
-set hostdict [gethostdict]
+set hostdict      [dict create]
+set localportdict [dict create]
+
+parsesshconfig
 
 proc sethost {host key value} {
   global hostdict
@@ -152,25 +179,58 @@ proc gethosts {} {
   dict keys $hostdict
 }
 
+proc setlocalport {localport key value} {
+  global localportdict
+  dict set localportdict $localport $key $value
+}
+
+proc getlocalport {localport key} {
+  global localportdict
+  if {[string equal $key "exists"]} {
+    dict exists $localportdict $localport
+  } else {
+    dict get $localportdict $localport $key
+  }
+}
+
+proc getlocalports {} {
+  global localportdict
+  dict keys $localportdict
+}
+
 ################################################################################
 
 proc openssh {argv} {
   set host [lindex $argv 0]
-  puts stderr "host is \"$host\"."
-  puts stderr "dependency is \"[gethost $host "dependency"]\"."
-  if {![string equal [gethost $host "dependency"] ""]} {
-    opentunnel [gethost $host "dependency"]
-  }
+  openhostdependency $host
   execl "/usr/bin/ssh" $argv
 }
 
 ################################################################################
 
+proc getdependency {host} {
+  set hostname [gethost $host "hostname"]
+  if {![string equal $hostname "localhost"]} {
+    return ""
+  }
+  set localport [gethost $host "port"]
+  if {![getlocalport $localport "exists"]} {
+    return ""
+  }
+  set tunnel [getlocalport $localport "tunnel"]
+  return $tunnel
+}
+
+proc openhostdependency {host} {
+  set dependency [getdependency $host]
+  if {![string equal $dependency ""]} {
+    opentunnel $dependency
+  }
+}
+
 proc opentunnel {tunnel} {
   if {![gethost $tunnel "open"]} {
-    if {![string equal [gethost $tunnel "dependency"] ""]} {
-      opentunnel [gethost $tunnel "dependency"]
-    }
+    openhostdependency $tunnel
     exec -ignorestderr -- \
       "/bin/launchctl" "submit" "-l" "ssh-tunnel.$tunnel" \
       "-e" "$::logdir/topo-log-$tunnel.txt" \
@@ -201,17 +261,18 @@ proc yesorno {value} {
 }
 
 proc listsubcommand {} {
-  set format "%-23s %-10s %-23s %-11s %-5s %s"
-  puts [format $format "Host" "Type" "Dependency" "Configured?" "Open?" "OpenAtStartup?"]
-  puts [format $format "====" "====" "==========" "===========" "=====" "=============="]
+  set format "%-31s %-10s %-31s %-11s %-31s %-5s %s"
+  puts [format $format "Host" "Type" "Dependency" "Configured?" "Host:Port" "Open?" "OpenAtStartup?"]
+  puts [format $format "====" "====" "==========" "===========" "=========" "=====" "=============="]
   foreach host [gethosts] {
     switch [gethost $host "type"] {
       "tunnel" {
         puts [format $format \
           $host \
           [gethost $host "type"] \
-          [gethost $host "dependency"] \
+          [getdependency $host] \
           [yesorno [gethost $host "configured"]] \
+          [gethost $host "hostname"]:[gethost $host "port"] \
           [yesorno [gethost $host "open"]] \
           [yesorno [gethost $host "openatstartup"]] \
         ]
@@ -220,13 +281,25 @@ proc listsubcommand {} {
         puts [format $format \
           $host \
           [gethost $host "type"] \
-          [gethost $host "dependency"] \
+          [getdependency $host] \
           [yesorno [gethost $host "configured"]] \
+          [gethost $host "hostname"]:[gethost $host "port"] \
 	  "" \
 	  "" \
         ]
       }
     }
+  }
+  set format "%-11s %-23s %-23s %-11s"
+  puts [format $format "Local Port" "Tunnel" "Remote Host" "Remote Port"]
+  puts [format $format "==========" "======" "===========" "==========="]
+  foreach localport [getlocalports] {
+    puts [format $format \
+      $localport \
+      [getlocalport $localport "tunnel"] \
+      [getlocalport $localport "remotehost"] \
+      [getlocalport $localport "remoteport"] \
+    ]
   }
 }
 
@@ -362,22 +435,18 @@ proc checkhostconfigured {tunnel} {
 
 ################################################################################
 
-proc opensubcommand {argv} {
-  checkargc $argv 1 0
-  set host [lindex $argv 0]
+proc opensubcommand {host} {
   checkhostexists $host
   checkhostconfigured $host
   switch [gethost $host "type"] {
     "tunnel" {
-      checkargc $argv 1 1
       opentunnel $host
-      refreshscriptmenus
     }
-    "ssh" {
-      checkargc $argv 1 0
-      openssh $argv
+    default {
+      openhostdependency $host
     }
   }
+  refreshscriptmenus
 }
 
 proc openallsubcommand {} {
@@ -403,6 +472,13 @@ proc closeallsubcommand {} {
     closetunnel $tunnel
   }
   refreshscriptmenus
+}
+
+proc sshsubcommand {argv} {
+  set host [lindex $argv 0]
+  checkhostexists $host
+  checkhostconfigured $host
+  openssh $argv
 }
 
 proc startupsubcommand {} {
@@ -444,7 +520,8 @@ proc checkargc {argv min max} {
 proc main {argv} {
   switch [lindex $argv 0] {
     "open" {
-      opensubcommand [lrange $argv 1 end]
+      checkargc $argv 2 2
+      opensubcommand [lindex $argv 1]
     }
     "close" {
       checkargc $argv 2 0
@@ -457,6 +534,10 @@ proc main {argv} {
     "closeall" {
       checkargc $argv 1 1
       closeallsubcommand
+    }
+    "ssh" {
+      checkargc $argv 2 0
+      sshsubcommand [lrange $argv 1 end]
     }
     "startup" {
       checkargc $argv 1 1
