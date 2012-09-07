@@ -80,16 +80,7 @@ namespace eval sshconfig {
           set currenthosts [lrange $line 1 end]
           foreach host $currenthosts {
             dict set hostdict $host "configured" true
-          }
-          foreach host $currenthosts {
-            switch -glob $host {
-              "*-tunnel" {
-                dict set hostdict $host "type" "tunnel"
-              }
-              default {
-                dict set hostdict $host "type" "ssh"
-              }
-            }
+            dict set hostdict $host "type" "ssh"
           }
         }
         "hostname" -
@@ -117,8 +108,11 @@ namespace eval sshconfig {
         }
         "localforward" {
           set tunneledport [lindex $line 1]
-          # Check only one host
+          if {[llength $currenthosts] != 1} {
+            fatalerror "tunnels must have only one host pattern."
+          }
           set host $currenthosts
+          dict set hostdict $host "type" "tunnel"
           dict set tunneledportdict $tunneledport [dict create tunnel $host]
         }
       }
