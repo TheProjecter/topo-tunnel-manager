@@ -194,6 +194,13 @@ proc ssh {argv} {
   execl "/usr/bin/ssh" $argv
 }
 
+proc openurl {type host path} {
+  set hostname [host::get $host "hostname"]
+  set port [host::get $host "port"]
+  set url "$type://$hostname:$port/$path"
+  execl "/usr/bin/open" [list $url]
+}
+
 ################################################################################
 
 proc waitforportforhost {host} {
@@ -470,6 +477,27 @@ proc sshsubcommand {subcommand argv} {
   ssh $argv
 }
 
+proc httpsubcommand {subcommand argv} {
+  checkargc $subcommand $argv 1 2
+  urlsubcommand $subcommand [concat "http" $argv]
+}
+
+proc httpssubcommand {subcommand argv} {
+  checkargc $subcommand $argv 1 2
+  urlsubcommand $subcommand [concat "https" $argv]
+}
+
+proc urlsubcommand {subcommand argv} {
+  checkargc $subcommand $argv 2 3
+  set type [lindex $argv 0]
+  set host [lindex $argv 1]
+  set path [lindex $argv 2]
+  checkhostexists $host
+  checkhostconfigured $host
+  opentunnelforhost $host
+  openurl $type $host $path
+}
+
 proc startupsubcommand {subcommand argv} {
   checkargc $subcommand $argv 0 0
   set opentunnels {}
@@ -524,6 +552,9 @@ proc main {argv} {
     "openall" -
     "closeall" -
     "ssh" -
+    "http" -
+    "https" -
+    "url" -
     "startup" -
     "list" -
     "installscripts" {
