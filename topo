@@ -190,9 +190,7 @@ namespace eval sshconfig {
 
 ################################################################################
 
-proc openssh {argv} {
-  set host [lindex $argv 0]
-  opentunnelforhost $host
+proc ssh {argv} {
   execl "/usr/bin/ssh" $argv
 }
 
@@ -227,8 +225,6 @@ proc opentunnel {tunnel} {
   }
 }
 
-################################################################################
-
 proc closetunnel {tunnel} {
   if {[host::get $tunnel "open"]} {
     exec -ignorestderr -- \
@@ -247,7 +243,8 @@ proc yesorno {value} {
   }
 }
 
-proc listsubcommand {} {
+proc listsubcommand {subcommand argv} {
+  checkargc $subcommand $argv 0 0
   set format "%-31s %-10s %-31s %-11s %-31s %-5s %s"
   puts [format $format "Host" "Type" "Tunnel" "Configured?" "Host:Port" "Open?" "OpenAtStartup?"]
   puts [format $format "====" "====" "======" "===========" "=========" "=====" "=============="]
@@ -396,22 +393,31 @@ proc fatalerror {message} {
 
 ################################################################################
 
-proc checkhostexists {tunnel} {
-  if {![host::exists $tunnel]} {
-    fatalerror "tunnel \"$tunnel\" does not exist."
+proc checkhostexists {host} {
+  if {![host::exists $host]} {
+    fatalerror "host \"$host\" does not exist."
   }
 }
 
-proc checkhostconfigured {tunnel} {
-  checkhostexists $tunnel
-  if {![host::get $tunnel "configured"]} {
-    fatalerror "tunnel \"$tunnel\" is not configured."
+proc checkhostconfigured {host} {
+  checkhostexists $host
+  if {![host::get $host "configured"]} {
+    fatalerror "host \"$host\" is not configured."
+  }
+}
+
+proc checkhostistunnel {host} {
+  checkhostexists $host
+  if {![string equal "tunnel" [host::get $host "type"]]} {
+    fatalerror "host \"$host\" is not a tunnel."
   }
 }
 
 ################################################################################
 
-proc opensubcommand {host} {
+proc opensubcommand {subcommand argv} {
+  checkargc $subcommand $argv 1 1
+  set host [lindex $argv 0]
   checkhostexists $host
   checkhostconfigured $host
   switch [host::get $host "type"] {
@@ -425,113 +431,106 @@ proc opensubcommand {host} {
   refreshscriptmenus
 }
 
-proc openallsubcommand {} {
-  foreach tunnel [host::keys] {
-    opentunnel $tunnel
+proc openallsubcommand {subcommand argv} {
+  checkargc $subcommand $argv 0 0
+  foreach host [host::keys] {
+    if {[string equal "tunnel" [host::get $host "type"]]} {
+      opentunnel $host
+    }
   }
   refreshscriptmenus
 }
 
-proc closesubcommand {tunnels} {
-  foreach tunnel $tunnels {
-    checkhostexists $tunnel
-    checkhostconfigured $tunnel
-  }
-  foreach tunnel $tunnels {
-    closetunnel $tunnel
-  }
-  refreshscriptmenus
-}
-
-proc closeallsubcommand {} {
-  foreach tunnel [host::keys] {
-    closetunnel $tunnel
-  }
-  refreshscriptmenus
-}
-
-proc sshsubcommand {argv} {
+proc closesubcommand {subcommand argv} {
+  checkargc $subcommand $argv 1 1
   set host [lindex $argv 0]
   checkhostexists $host
   checkhostconfigured $host
-  openssh $argv
+  checkhostistunnel $host
+  closetunnel $host
+  refreshscriptmenus
 }
 
-proc startupsubcommand {} {
-  set opentunnels {}
-  foreach tunnel [host::keys] {
-    if {[host::get $tunnel "open"] && [host::get $tunnel "configured"]} {
-      lappend opentunnels $tunnel
+proc closeallsubcommand {subcommand argv} {
+  checkargc $subcommand $argv 0 0
+  foreach host [host::keys] {
+    if {[string equal "tunnel" [host::get $host "type"]]} {
+      closetunnel $host
     }
-  }
-  foreach tunnel [host::keys] {
-    closetunnel $tunnel
-  }
-  foreach tunnel [host::keys] {
-    if {[host::get $tunnel "openatstartup"]} {
-      opentunnel $tunnel
-    }
-  }
-  foreach tunnel $opentunnels {
-    opentunnel $tunnel
   }
   refreshscriptmenus
 }
 
-proc installscriptssubcommand {} {
+proc sshsubcommand {subcommand argv} {
+  checkargc $subcommand $argv 1
+  set host [lindex $argv 0]
+  checkhostexists $host
+  checkhostconfigured $host
+  opentunnelforhost $host
+  ssh $argv
+}
+
+proc startupsubcommand {subcommand argv} {
+  checkargc $subcommand $argv 0 0
+  set opentunnels {}
+  foreach host [host::keys] {
+    if {[string equal "tunnel" [host::get $host "type"]] &&
+        [host::get $host "open"] && 
+        [host::get $host "configured"]} {
+      lappend opentunnels $host
+    }
+  }
+  foreach host [host::keys] {
+    if {[string equal "tunnel" [host::get $host "type"]]} {
+      closetunnel $host
+    }
+  }
+  foreach host [host::keys] {
+    if {[string equal "tunnel" [host::get $host "type"]] &&
+        [host::get $host "openatstartup"]} {
+      opentunnel $host
+    }
+  }
+  foreach host $opentunnels {
+    opentunnel $host
+  }
+  refreshscriptmenus
+}
+
+proc installscriptssubcommand {subcommand argv} {
+  checkargc $subcommand $argv 0 0
   installscripts
 }
 
-proc checkargc {argv min max} {
+proc checkargc {subcommand argv min {max ""}} {
   set argc [llength $argv]
-  set subcommand [lindex $argv 0]
-  if {$min > 0 && $argc < $min} {
+  if {$argc < $min} {
     fatalerror "$subcommand: too few arguments."
   }
-  if {$max > 0 && $argc > $max} {
+  if {![string equal $max ""] && $argc > $max} {
     fatalerror "$subcommand: too many arguments."
   }
 }
 
 proc main {argv} {
-  switch [lindex $argv 0] {
-    "open" {
-      checkargc $argv 2 2
-      opensubcommand [lindex $argv 1]
-    }
-    "close" {
-      checkargc $argv 2 0
-      closesubcommand [lrange $argv 1 end]
-    }
-    "openall" {
-      checkargc $argv 1 1
-      openallsubcommand
-    }
-    "closeall" {
-      checkargc $argv 1 1
-      closeallsubcommand
-    }
-    "ssh" {
-      checkargc $argv 2 0
-      sshsubcommand [lrange $argv 1 end]
-    }
-    "startup" {
-      checkargc $argv 1 1
-      startupsubcommand
-    }
-    "list" {
-      checkargc $argv 1 1
-      listsubcommand
-    }
+  if {[llength $argv] == 0} {
+    fatalerror "missing subcommand."
+  }
+  set subcommand [lindex $argv 0]
+  set argv [lrange $argv 1 end]
+  switch $subcommand {
+    "open" -
+    "close" -
+    "openall" -
+    "closeall" -
+    "ssh" -
+    "startup" -
+    "list" -
     "installscripts" {
-      checkargc $argv 1 1
-      installscriptssubcommand
-    }
-    "" {
-      fatalerror "missing subcommand."
+      ${subcommand}subcommand $subcommand $argv
     }
     default {
-      fatalerror "invalid subcommand \"[lindex $argv 0]\"."
+      fatalerror "invalid subcommand \"$subcommand\"."
     }
   }
   exit 0
