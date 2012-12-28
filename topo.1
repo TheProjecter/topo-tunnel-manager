@@ -11,45 +11,121 @@
 .Sh DESCRIPTION
 .Nm 
 manages
-.Nm ssh
-tunnels from the command line and, optionally, from the scripts menu.
+secure shell 
+.Nm ( ssh )
+tunnels from the command line and from the scripts menu.
 .Pp
-An 
-.Nm ssh
-tunnel is an
-.Nm ssh
-connection from the local host to an intermediate host that forwards TCP ports from the local host to destinations hosts that are directly accessible from the intermediate host. A typical use of an
-.Nm ssh
-tunnel is to gain convenient access to services on hosts behind a firewall via a bastion host.
+A secure shell tunnel is an
+secure shell
+connection from the local host to a remote host through which TCP ports on the local host are forwarded to ports on destination hosts directly accessible from the remote host.
+A common use of a tunnel is to gain convenient access to services on hosts behind a firewall via a bastion host.
 .Pp
 The tunnels managed by 
 .Nm
-are robust, in that once opened, they are reopened after network interruptions or when the computer wakes from sleep. However, they are not persistent, in  that they are not generally preserved from one login to the next. It is, however, possible to open specified tunnels at startup.
-.Pp
-Sometimes it is necessary to use two or more tunnels to reach a destination host, for example, if the destination host is behind two or more firewalls. This situation is handled by
-.Nm
-by allowing one tunnel to depend on another. When a tunnel is opened by
-.Nm ,
-all of its dependencies are opened first.
+are robust, in that once opened they are reopened after network interruptions or when the computer wakes from sleep. However, they are not persistent, in that they are not generally preserved from one login to the next. It is, however, possible to open specified tunnels at startup.
 .Pp
 .Nm
 mean "mole" in Spanish. It is pronounced more or less like the first two syllables of the English word "topographic".
+.Sh CONFIGURATION
+.Nm
+looks for tunnels, tunneled ports, and tunneled hosts in the standard
+secure shell configuration file ~/.ssh/config.
+.Pp
+A port forwarded through a tunnel is referred to as a "tunneled port". A host reached by a tunneled port is referred to as a "tunneled host"; a host reached by a port that is not tunneled is referred to as a "direct host".
+.Pp
+Tunnels are defined by Host sections with (a) only one pattern and (b) one or more tunneled ports defined by LocalForward keywords. 
+.Pp
+For example, the following Host section defines a tunnel called alpha-tunnel through the host alpha and two tunneled ports, one from local TCP port 2222 to port 22 (the default ssh port) on destination host beta and another from local TCP port 8080 to port 80 (the default HTTP port) on destination host gamma:
+.Bd -literal -offset indent
+Host alpha-tunnel
+  HostName alpha
+  LocalForward 2222 beta:22
+  LocalForward 8080 gamma:80	
+.Ed
+.Pp
+The suffix "-tunnel" is optional, but conventional.
+.Pp
+Tunneled hosts are defined by Host sections with HostName and Port keywords that refer to a tunneled port. Continuing with the previous example, the following two host definitions define tunneled hosts that connect to the port 22 (the default ssh port) on beta and port 80 (the default HTTP port) on gamma:
+.Bd -literal -offset indent
+Host beta
+  HostName localhost
+  Port 2222
+
+Host gamma-http
+  HostName localhost
+  Port 8080
+.Ed
+.Pp
+.Nm
+determines tunnel dependencies automatically. Continuing with the previous examples,
+.Nm
+determines that the tunneled hosts beta and gamma-http depend on the tunnel alpha-tunnel. 
+.Pp
+When asked to open a connection to a host, if the corresponding port is a tunneled port
+.Nm
+first makes sure the appropriate tunnel is open. It applies this process iteratively, so tunnels can be easily carried through other tunnels, which is useful, for example, if the destination host is behind two or more firewalls. 
+.Pp
+As a further example of dependencies, the following host definitions define a tunnel and tunneled host that allow access to a host delta that is accessible from beta.
+.Bd -literal -offset indent
+Host beta-tunnel
+  HostName localhost
+  Port 2222
+  LocalForward 2223 delta:22
+
+Host delta
+  HostName localhost
+  Port 2223
+.Ed
+.Pp
+If
+.Nm
+is asked to open a connection to delta, it would first make sure that alpha-tunnel and beta-tunnel are open.
+.Pp
+Dependencies are determined from the local port number. This means that local ports must be uniquely assigned to tunneled hosts.
+.Pp
+Tunnels can be opened at start up by including a "#TunnelOpenAtStartUp" pseudo-keyword in their host section with a value of "yes". Since this keyword begins with #, it is treated as a comment by
+.Nm ssh .
+As with standard keywords, the interpretation of this pseudo-keyword is not sensitive to case. For example, the following host definition
+.Bd -literal -offset indent
+Host beta-tunnel
+  #TunnelOpenAtStartUp yes
+  HostName localhost
+  Port 2222
+  LocalForward 2223 delta:22
+.Ed
+.Pp
+indicates that beta-tunnel (and any dependent tunnels) should be opened at start up.
+.Sh AUTHENTICATION
+.Nm
+is designed to work best with password-less login. To this end, it makes sure that any
+.Nm ssh
+commands it executes run with the
+.Nm SSH_AUTH_SOCK
+environment variable set appropriately.
 .Sh SUBCOMMANDS
 .Bl -tag -width -indent
 .It Xo Ar open
-.Ar tunnelname
+.Ar host
 .Xc
-Open the specified tunnel, and any tunnels on which the specified tunnel depends, directly or indirectly.
+If host is a tunnel, open the tunnel. 
+If host is a tunneled host, open the corresponding tunnel.
+If host is a direct host, do nothing.
+.Pp
+Attempting to opening a tunnel that is already open is not an error but results in no action.
 .It Xo Ar close
-.Ar tunnelname
+.Ar host
 .Xc
-Close the specified tunnel. Closing a tunnel that is already closed is not an error. Closing a tunnel does not close any tunnels on which the tunnel depends, directly or indirectly.
+If host is a tunnel, close the tunnel. 
+Otherwise, do nothing.
+.Pp
+Closing a tunnel that is already closed is not an error.
+Closing a tunnel does not close any tunnels on which the tunnel depends.
 .It Xo Ar openall
 .Xc
-Open all defined tunnels.
+Open all tunnels.
 .It Xo Ar closeall
 .Xc
-Close all defined tunnels.
+Close all tunnels.
 .It Xo Ar list
 .Xc
 List all tunnels, together with any dependencies and whether they are configured, currently open, and opened by the
@@ -57,7 +133,7 @@ List all tunnels, together with any dependencies and whether they are configured
 subcommand.
 .It Xo Ar startup
 .Xc
-Open all tunnels whose definitions indicate (by use of the #TunnelOpenAtStartUp keyword) that they should be opened by the
+Open all tunnels whose definitions indicate (by use of the #TunnelOpenAtStartUp pseudo-keyword) that they should be opened by the
 .Nm startup
 subcommand.
 .It Xo Ar installscripts
@@ -66,87 +142,6 @@ Install scripts to interface to
 .Nm
 in the scripts menu.
 .El
-.Sh DEFINITIONS
-.Nm
-reads tunnel definitions from the ~/.ssh/config file; they are simply Host sections that refer to hosts with names ending in "-tunnel". Normally a tunnel definition will use a HostName keyword, and perhaps User and Port keywords, to define the intermediate host and use LocalForward keywords to forward ports from the local host to destination hosts.
-.Pp
-Within a tunnel Host section,
-.Nm
-interprets the following keyword-value pairs. Since the keywords all begin with #, they are ignored by 
-.Nm ssh .
-Following 
-.Nm ssh ,
-keywords are case insensitive, but values are case sensitive and can be surrounded by double quotes.
-.Bl -tag -width -indent
-.It Xo Ar #TunnelDependency
-.Ar tunnelname
-.Xc
-The tunnel being defined by this Host section depends on the tunnel named by the #TunnelDependency keyword. Prior to 
-.Nm 
-opening a tunnel, it first opens any tunnel on which that tunnel depends.
-.Pp
-A tunnel may depend on at most one other tunnel directly. That is, there must be at most one #TunnelDependency keyword in each Host section. However, a tunnel that is depended on may in turn depend on another tunnel. Such indirect dependencies are handled correctly by
-.Nm .
-.It Xo Ar #TunnelOpenAtStartUp
-.Ar boolean
-.Xc
-If the value is "yes", the tunnel is opened when 
-.Nm 
-is run with the 
-.Nm startup
-subcommand. The default is "no".
-.El
-.Sh EXAMPLES
-.Pp
-For example, this Host section in ~/.ssh/config defines a tunnel called foo-tunnel through the intermediate host foo that forwards local TCP port 2222 to port 22 (the default ssh port) on destination host bar and local TCP port 8080 to port 80 (the default HTTP port) on destination host baz.
-.Bd -literal -offset indent
-Host foo-tunnel
-  HostName foo
-  LocalForward 2222 bar:22
-  LocalForward 8080 baz:80	
-.Ed
-.Pp
-Once opened (either from the command line or the script), one can connect to bar using
-.Bd -literal -offset indent
-ssh -p 2222 localhost
-.Ed
-.Pp
-and to baz using
-.Bd -literal -offset indent
-open http://localhost:8080/
-.Ed
-.Pp
-The 
-.Nm ssh
-connection can be make more mnemonic by defining another Host section in ~/.ssh/config:
-.Bd -literal -offset indent
-Host bar
-  HostName localhost
-  Port 2222
-.Ed
-.Pp
-and then simply using
-.Bd -literal -offset indent
-ssh bar
-.Ed
-.Pp
-To continue the example, the following Host sections in ~/.ssh/config defines a tunnel called bar-tunnel through the intermediate host bar that forwards local TCP port 2223 to port 22 (the default ssh port) on destination host frob and then the connection to frob available under that name.
-.Bd -literal -offset indent
-Host bar-tunnel
-  HostName localhost
-  Port 2222
-  #TunnelDependency foo-tunnel
-  LocalForward 2223 frob:22
-  
-Host frob
-  HostName localhost
-  Port 2223
-.Ed
-.Pp
-Note that the dependency of bar-tunnel on foo-tunnel is indicated by the #TunnelDependency keyword and value. Thus, when bar-tunnel is opened, foo-tunnel will be automatically opened too. Once bar-tunnel is opened, one can connect to frob using
-.Bd -literal -offset indent
-ssh frob
-.Ed
 .Sh FILES
 .Bl -tag -width "/System/Library/LaunchDaemons" -compact
 .It Pa ~/.ssh/config
@@ -156,4 +151,6 @@ from this file.
 .El
 .Sh SEE ALSO 
 .Xr ssh 1 ,
-.Xr ssh_config 5
+.Xr ssh-agent 1 , 
+and
+.Xr ssh_config 5 .
