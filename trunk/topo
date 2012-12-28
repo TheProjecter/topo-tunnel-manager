@@ -194,10 +194,10 @@ proc ssh {argv} {
   execl "/usr/bin/ssh" $argv
 }
 
-proc openurl {type host path} {
+proc openurl {scheme host path} {
   set hostname [host::get $host "hostname"]
   set port [host::get $host "port"]
-  set url "$type://$hostname:$port/$path"
+  set url "$scheme://$hostname:$port/$path"
   execl "/usr/bin/open" [list $url]
 }
 
@@ -489,13 +489,13 @@ proc httpssubcommand {subcommand argv} {
 
 proc urlsubcommand {subcommand argv} {
   checkargc $subcommand $argv 2 3
-  set type [lindex $argv 0]
+  set scheme [lindex $argv 0]
   set host [lindex $argv 1]
   set path [lindex $argv 2]
   checkhostexists $host
   checkhostconfigured $host
   opentunnelforhost $host
-  openurl $type $host $path
+  openurl $scheme $host $path
 }
 
 proc startupsubcommand {subcommand argv} {
