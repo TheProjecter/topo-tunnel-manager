@@ -111,12 +111,36 @@ If host is a tunnel, open the tunnel.
 If host is a tunneled host, open the corresponding tunnel.
 If host is a direct host, do nothing.
 .Pp
+Continuing with the previous examples, both
+.Bd -literal -offset indent
+topo open alpha-tunnel
+.Ed
+.Pp
+and
+.Bd -literal -offset indent
+topo open beta
+.Ed
+.Pp
+would open alpha-tunnel (since the tunneled host beta depends on alpha-tunnel).
+.Pp
 Attempting to opening a tunnel that is already open is not an error but results in no action.
 .It Xo Ar close
 .Ar host
 .Xc
 If host is a tunnel, close the tunnel. 
 Otherwise, do nothing.
+.Pp
+Continuing with the previous examples, 
+.Bd -literal -offset indent
+topo close alpha-tunnel
+.Ed
+.Pp
+closes alpha-tunnel, but
+.Bd -literal -offset indent
+topo open beta
+.Ed
+.Pp
+does nothing (since beta is not a tunnel but rather is a tunneled host).
 .Pp
 Closing a tunnel that is already closed is not an error.
 Closing a tunnel does not close any tunnels on which the tunnel depends.
@@ -126,14 +150,70 @@ Open all tunnels.
 .It Xo Ar closeall
 .Xc
 Close all tunnels.
-.It Xo Ar list
+.It Xo Ar ssh
+.Ar host
+.Op Ar arguments ...
 .Xc
-List all tunnels, together with any dependencies and whether they are configured, currently open, and opened by the
-.Nm startup
-subcommand.
+Open any tunnels on which host depends, and then open a
+.Nm ssh
+connection to host.
+.Pp
+Continuing with the previous examples,
+.Bd -literal -offset indent
+topo ssh delta
+.Ed
+.Pp
+would open alpha-tunnel and beta-tunnel (which are dependencies of delta) and then open a ssh connection to delta.
+.It Xo Ar http
+.Ar host
+.Ar path
+.Xc
+Equivalent to the url subcommand with the scheme part specified to be http.
+.Pp
+Continuing with the previous examples,
+.Bd -literal -offset indent
+topo http gamma-http a/b/c.html
+.Ed
+.Pp
+would open alpha-tunnel (which is a dependency of gamma-http) and then open the following URL in the default browser:
+.Bd -literal -offset indent
+http://localhost:8080/a/b/c.html
+.Ed
+.Pp
+This URL corresponds to the path a/b/c.html on the HTTP server running on port 80 of gamma.
+.It Xo Ar https
+.Ar host
+.Ar path
+.Xc
+Equivalent to the url subcommand with the scheme part specified to be https.
+.It Xo Ar url
+.Ar scheme
+.Ar host
+.Ar path
+.Xc
+Open any tunnels on which host depends, construct a URL whose scheme and path part are given by the subcommand arguments, and whose host and port part refer to the forwarded port in the host definition for host, and then open the constructed URL in the default browser.
+.Pp
+Continuing with the previous examples,
+.Bd -literal -offset indent
+topo url http gamma-http a/b/c.html
+.Ed
+.Pp
+would open alpha-tunnel (which is a dependency of gamma-http) and then open the following URL in the default browser:
+.Bd -literal -offset indent
+http://localhost:8080/a/b/c.html
+.Ed
+.Pp
+This URL corresponds to the path a/b/c.html on the HTTP server running on port 80 of gamma.
+.Pp
+For HTTP and HTTPS connections, the http and https subcommands are more concise.
 .It Xo Ar startup
 .Xc
 Open all tunnels whose definitions indicate (by use of the #TunnelOpenAtStartUp pseudo-keyword) that they should be opened by the
+.Nm startup
+subcommand.
+.It Xo Ar list
+.Xc
+List all tunnels, together with any dependencies and whether they are configured, currently open, and opened by the
 .Nm startup
 subcommand.
 .It Xo Ar installscripts
