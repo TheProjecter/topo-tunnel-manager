@@ -328,14 +328,18 @@ set fastscriptsrunsatstartup [exec "/bin/sh" "-c" {
 
 set fastscripts [expr {$fastscriptsrunning || $fastscriptsrunsatstartup}]
 
-proc makescript {subpath argv} {
+proc scriptsubpath {subpath} {
   global fastscripts
   if {!$fastscripts} {
     set subpath [regsub {^..\)} $subpath ""]
     set subpath [regsub {/..\)} $subpath "/"]
   }
+  return $subpath
+}
+
+proc makescript {subpath argv} {
   global scriptdir
-  set path [file join $scriptdir $subpath]
+  set path [file join $scriptdir [scriptsubpath $subpath]]
   file mkdir [file dirname $path]
   set channel [open $path "w" "0744"]
   puts $channel "#!/bin/sh"
@@ -354,6 +358,26 @@ proc makescriptseparator {subpath} {
     set path [file join $scriptdir "$subpath-***"]
     file mkdir $path
   }
+}
+
+proc makeaboutscript {subpath} {
+  global scriptdir
+  set path [file join $scriptdir [scriptsubpath $subpath]]
+  set channel [open "|/usr/bin/osacompile -o $path.scpt" "w"]
+  puts $channel {
+set u to "http://www.alan-watson.org/topo.html"
+set m to ¬
+  "Topo is a tool to manage SSH tunnels from the command line and the scripts menu.\n" & ¬
+  "\n" & ¬
+  "Version 0.0.\n" & ¬
+  "\n" & ¬
+  "Copyright © 2012 Alan M. Watson <alan@alan-watson.org>.\n"
+set r to display alert "Topo" as informational message m buttons {"Visit Web Site", "Close"}
+if button returned of r is "Visit Web Site" then
+	do shell script "/usr/bin/open " & quoted form of (u)
+end if
+  }
+  close $channel
 }
 
 proc refreshscriptmenus {} {
@@ -381,6 +405,7 @@ proc refreshscriptmenus {} {
     makescript          "BB)Close.../CC)All" [list "closeall"]
     makescriptseparator "CC)"
     makescript          "DD)Restart" [list "startup"]
+    makeaboutscript     "EE)About"
   }
 }
 
