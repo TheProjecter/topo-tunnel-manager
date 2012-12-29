@@ -33,9 +33,7 @@
 
 ################################################################################
 
-install:
-	sudo install -C topo /usr/bin/
-	sudo install -C topo.1 /usr/share/man/man1/
-	sudo osacompile -o /Applications/TopoHelper.app TopoHelper.applescript
-	defaults write loginwindow AutoLaunchedApplicationDictionary -array-add '{ "Path" = "/Applications/TopoHelper.app"; "Hide" = 1; }'
-	topo installscripts
+all: TopoHelper.app
+
+TopoHelper.app: TopoHelper.applescript
+	osacompile -o TopoHelper.app TopoHelper.applescript

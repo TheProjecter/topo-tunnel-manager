@@ -29,4 +29,5 @@
 -- (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 -- OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+do shell script "/usr/bin/defaults write loginwindow AutoLaunchedApplicationDictionary -array-add '{ \"Path\" = \"/Applications/TopoHelper.app\"; \"Hide\" = 1; }'"
 do shell script "/usr/bin/topo startup"
