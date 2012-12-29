@@ -33,10 +33,10 @@
 
 ################################################################################
 
-all: TopoHelper.app Topo.pkg
+all: Topo.dmg
 
 clean:
-	rm -rf TopoHelper.app Topo.pkg
+	rm -rf TopoHelper.app Topo.pkg Topo.dmg
 
 TopoHelper.app: TopoHelper.applescript
 	osacompile -o TopoHelper.app TopoHelper.applescript
@@ -44,3 +44,9 @@ TopoHelper.app: TopoHelper.applescript
 Topo.pkg: TopoHelper.app
 	packagemaker -d Topo.pmdoc -o Topo.pkg
 
+Topo.dmg: Topo.pkg README.rtf LICENSE.rtf
+	rm -rf dmg
+	mkdir -p dmg/Topo
+	cp -r Topo.pkg README.rtf LICENSE.rtf dmg/Topo
+	hdiutil create Topo.dmg -srcfolder dmg/Topo -ov
+	rm -rf dmg
