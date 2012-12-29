@@ -33,7 +33,14 @@
 
 ################################################################################
 
-all: TopoHelper.app
+all: TopoHelper.app Topo.pkg
+
+clean:
+	rm -rf TopoHelper.app Topo.pkg
 
 TopoHelper.app: TopoHelper.applescript
 	osacompile -o TopoHelper.app TopoHelper.applescript
+
+Topo.pkg: TopoHelper.app
+	packagemaker -d Topo.pmdoc -o Topo.pkg
+
