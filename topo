@@ -425,19 +425,18 @@ proc makeaboutscript {subpath} {
   global scriptdir
   set path [file join $scriptdir [scriptsubpath $subpath]]
   set channel [open "|/usr/bin/osacompile -o $path.scpt" "w"]
-  puts $channel {
-set u to "http://www.alan-watson.org/topo.html"
-set m to ¬
-  "Topo is a tool to manage SSH tunnels from the command line and the scripts menu.\n" & ¬
-  "\n" & ¬
-  "Version 0.0.\n" & ¬
-  "\n" & ¬
-  "Copyright © 2012 Alan M. Watson <alan@alan-watson.org>.\n"
-set r to display alert "Topo" as informational message m buttons {"Visit Web Site", "Close"}
-if button returned of r is "Visit Web Site" then
-	do shell script "/usr/bin/open " & quoted form of (u)
-end if
-  }
+  puts $channel {set u to "http://www.alan-watson.org/topo.html"}
+	puts $channel {set m to ¬}
+  puts $channel {  "Topo is a tool to manage Secure Shell (ssh) tunnels from the command line and the scripts menu.\n" & ¬}
+  puts $channel {  "\n" & ¬}
+  global version
+  puts $channel "  \"Version $version.\\n\" & ¬"
+  puts $channel {  "\n" & ¬}
+  puts $channel {  "Copyright © 2012 Alan M. Watson <alan@alan-watson.org>.\n"}
+  puts $channel {set r to display alert "Topo" as informational message m buttons {"Visit Web Site", "Close"}}
+  puts $channel {if button returned of r is "Visit Web Site" then}
+  puts $channel {	do shell script "/usr/bin/open " & quoted form of (u)}
+  puts $channel {end if}
   close $channel
 }
 
