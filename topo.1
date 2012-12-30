@@ -248,6 +248,29 @@ List all tunnels, together with any dependencies and whether they are configured
 .Ar startup
 subcommand.
 .El
+.Sh SCRIPTS
+.Nm
+installs and maintains a menu named 
+.Qq Topo
+in the scripts menu which shows the status of the configured tunnels and allows them to be opened and closed.
+.Pp
+The menu has two principal submenus. 
+The 
+.Qq Open...
+submenu lists closed tunnels; selecting a closed tunnel opens it.
+The 
+.Qq Close...
+submenu lists open tunnels; selecting an open tunnel closes it. 
+The two submenus also contain 
+.Qq All
+entries which open or close all of the tunnels.
+.Pp
+While 
+.Nm
+works with both the standard Apple Script Menu, it
+works best with FastScripts
+.Pq Pa http://www.red-sweater.com/fastscripts/ ,
+which allows the menu entries to be presented in a convenient order.
 .Sh FILES
 .Bl -tag -width "/System/Library/LaunchDaemons" -compact
 .It Pa ~/.ssh/config
