@@ -1,0 +1,410 @@
+\# $Id$
+.Dd 30 December, 2012
+.Dt topo 1
+.Os Darwin
+.Sh NAME
+.Nm topo
+.Nd Manage ssh tunnels
+.Sh SYNOPSIS
+.Nm
+.Op Ar subcommand Op Ar arguments ...
+.Sh DESCRIPTION
+.Nm 
+manages Secure Shell 
+.Pq Nm ssh
+tunnels from the command line and from the scripts menu.
+.Pp
+A Secure Shell tunnel is an
+Secure Shell
+connection from the local host to a remote host through which TCP ports on the local host are forwarded to ports on destination hosts directly accessible from the remote host.
+A common use of a tunnel is to gain convenient access to services on hosts behind a firewall via a bastion host.
+.Pp
+The tunnels managed by 
+.Nm
+are robust, in that once opened they are reopened after network interruptions or when the computer wakes from sleep. 
+However, they are not persistent, in that they are not generally preserved from one login to the next. 
+It is, however, possible to open specified tunnels at startup.
+.Pp
+.Nm
+mean "mole" in Spanish. 
+It is pronounced more or less like the first two syllables of the English word "topographic".
+.Sh CONFIGURATION
+.Nm
+looks for tunnels, tunneled ports, and tunneled hosts in the standard
+Secure Shell configuration file 
+.Pa ~/.ssh/config .
+.Pp
+A port forwarded through a tunnel is referred to as a 
+.Qq tunneled port .
+A host reached by a tunneled port is referred to as a 
+.Qq tunneled host ; 
+a host reached by a port that is not tunneled is referred to as a 
+.Qq direct host .
+.Pp
+Tunnels are defined by 
+.Ic Host
+sections with (a) only one pattern and (b) one or more tunneled ports defined by 
+.Ic LocalForward
+keywords. 
+.Pp
+For example, the following 
+.Ic Host
+section defines a tunnel called alpha-tunnel through the host alpha and two tunneled ports, one from local TCP port 2222 to port 22 (the default ssh port) on destination host beta and another from local TCP port 8080 to port 80 (the default HTTP port) on destination host gamma:
+.Bd -literal -offset indent
+Host alpha-tunnel
+  HostName alpha
+  LocalForward 2222 beta:22
+  LocalForward 8080 gamma:80	
+.Ed
+.Pp
+The suffix 
+.Qq -tunnel
+is optional, but conventional.
+.Pp
+Tunneled hosts are defined by 
+.Ic Host
+sections with 
+.Ic HostName
+and 
+.Ic Port
+keywords that refer to a tunneled port. 
+Continuing with the previous example, the following two 
+.Ic Host
+sections define tunneled hosts that connect to the port 22 (the default ssh port) on beta and port 80 (the default HTTP port) on gamma:
+.Bd -literal -offset indent
+Host beta
+  HostName localhost
+  Port 2222
+
+Host gamma-http
+  HostName localhost
+  Port 8080
+.Ed
+.Pp
+.Nm
+determines tunnel dependencies automatically.
+Continuing with the previous examples,
+.Nm
+determines that the tunneled hosts beta and gamma-http depend on the tunnel alpha-tunnel. 
+.Pp
+When asked to open a connection to a host, if the corresponding port is a tunneled port
+.Nm
+first makes sure the appropriate tunnel is open. It applies this process iteratively, so tunnels can be easily carried through other tunnels, which is useful, for example, if the destination host is behind two or more firewalls. 
+.Pp
+As a further example of dependencies, the following host definitions define a tunnel and tunneled host that allow access to a host delta that is accessible from beta.
+.Bd -literal -offset indent
+Host beta-tunnel
+  HostName localhost
+  Port 2222
+  LocalForward 2223 delta:22
+
+Host delta
+  HostName localhost
+  Port 2223
+.Ed
+.Pp
+If
+.Nm
+is asked to open a connection to delta, it would first make sure that alpha-tunnel and beta-tunnel are open.
+.Pp
+Dependencies are determined from the local port number.
+This means that local ports must be uniquely assigned to tunneled hosts.
+.Pp
+Tunnels can be opened at start up by including a 
+.Ic #OpenTunnelAtStartUp
+pseudo-keyword in their 
+.Ic Host
+section with a value of 
+.Qq yes . 
+Since this keyword begins with #, it is treated as a comment by
+.Nm ssh .
+As with standard keywords, the interpretation of this pseudo-keyword is not sensitive to case. For example, the following 
+.Ic Host 
+section indicates that beta-tunnel (and any dependent tunnels) should be opened at start up.
+.Bd -literal -offset indent
+Host beta-tunnel
+  #OpenTunnelAtStartUp yes
+  HostName localhost
+  Port 2222
+  LocalForward 2223 delta:22
+.Ed
+.Sh AUTHENTICATION
+.Nm
+is designed to work best with public-key authentication. 
+To this end, it makes sure that any
+.Nm ssh
+commands it executes have the
+.Ev SSH_AUTH_SOCK
+environment variable set appropriately.
+.Sh SUBCOMMANDS
+.Bl -tag -width -indent
+.It Xo Ic activate
+.Xc
+Activate
+.Nm 
+for this user.
+Each user should run this subcommand once prior to using 
+.Nm .
+Activation does three things: runs the 
+.Ic startup 
+subcommand; arranges to run the 
+.Ic startup
+subcommand at future logins; and creates the scripts menu.
+.It Xo Ic deactivate
+.Xc
+Deactivate
+.Nm
+for this user.
+Deactivation does three things: runs the 
+.Ic closeall
+subcommand; arranges to no longer run the
+.Ic startup
+subcommand at future logins; and removes the scripts menu.
+.It Xo Ic update
+.Xc
+Update the script menus.
+This subcommand should be run after editing the tunnel configurations in the
+.Pa ~/.ssh/config
+file. The scripts menu is also implicitly updated by all of the other subcommands except
+.Ic deactivate 
+and
+.Ic list .
+.It Xo Ic open
+.Ar host
+.Xc
+If 
+.Ar host
+is a tunnel, open the tunnel. 
+If 
+.Ar host 
+is a tunneled host, open the corresponding tunnel.
+If 
+.Ar host
+is a direct host, do nothing.
+.Pp
+Continuing with the previous examples, both
+.Bd -literal -offset indent
+topo open alpha-tunnel
+.Ed
+.Pp
+and
+.Bd -literal -offset indent
+topo open beta
+.Ed
+.Pp
+would open alpha-tunnel (since the tunneled host beta depends on alpha-tunnel).
+.Pp
+Attempting to opening a tunnel that is already open is not an error but results in no action.
+.It Xo Ic close
+.Ar host
+.Xc
+If 
+.Ar host
+is a tunnel, close the tunnel. 
+Otherwise, do nothing.
+.Pp
+Continuing with the previous examples, 
+.Bd -literal -offset indent
+topo close alpha-tunnel
+.Ed
+.Pp
+closes alpha-tunnel, but
+.Bd -literal -offset indent
+topo open beta
+.Ed
+.Pp
+does nothing (since beta is not a tunnel but rather is a tunneled host).
+.Pp
+Closing a tunnel that is already closed is not an error.
+Closing a tunnel does not close any tunnels on which the tunnel depends.
+.It Xo Ic openall
+.Xc
+Open all tunnels.
+.It Xo Ic closeall
+.Xc
+Close all tunnels.
+.It Xo Ic ssh
+.Ar host
+.Op Ar arguments ...
+.Xc
+Open any tunnels on which 
+.Ar host
+depends, and then open a
+.Nm ssh
+connection to 
+.Ar host .
+.Pp
+Continuing with the previous examples,
+.Bd -literal -offset indent
+topo ssh delta
+.Ed
+.Pp
+would open alpha-tunnel and beta-tunnel (which are dependencies of delta) and then open a ssh connection to delta.
+.It Xo Ic http
+.Ar host
+.Ar path
+.Xc
+Equivalent to the 
+.Ic url
+subcommand with the 
+.Ar scheme
+part specified to be http.
+.Pp
+Continuing with the previous examples,
+.Bd -literal -offset indent
+topo http gamma-http a/b/c.html
+.Ed
+.Pp
+would open alpha-tunnel (which is a dependency of gamma-http) and then open the following URL in the default browser:
+.Bd -ragged -offset indent
+.Pa http://localhost:8080/a/b/c.html
+.Ed
+.Pp
+This URL corresponds to the path 
+.Pa a/b/c.html
+on the HTTP server running on port 80 of gamma.
+.It Xo Ic https
+.Ar host
+.Ar path
+.Xc
+Equivalent to the 
+.Ic url
+subcommand with the 
+.Ar scheme
+part specified to be https.
+.It Xo Ic url
+.Ar scheme
+.Ar host
+.Ar path
+.Xc
+Open any tunnels on which 
+.Ar host
+depends, construct a URL whose scheme and path part are given by the
+.Ar scheme
+and
+.Ar path
+arguments, and whose host and port part refer to the forwarded port in the 
+.Ic Host
+section for 
+.Ar host , 
+and then open the constructed URL in the default browser.
+.Pp
+Continuing with the previous examples,
+.Bd -literal -offset indent
+topo url http gamma-http a/b/c.html
+.Ed
+.Pp
+would open alpha-tunnel (which is a dependency of gamma-http) and then open the following URL in the default browser:
+.Bd -ragged -offset indent
+.Pa http://localhost:8080/a/b/c.html
+.Ed
+.Pp
+This URL corresponds to the path 
+.Pa a/b/c.html
+on the HTTP server running on port 80 of gamma.
+.Pp
+For HTTP and HTTPS connections, the 
+.Ic http 
+and 
+.Ic https 
+subcommands are more concise.
+.It Xo Ic startup
+.Xc
+Open all tunnels whose definitions indicate (by use of the #OpenTunnelAtStartUp pseudo-keyword) that they should be opened by the
+.Ic startup
+subcommand.
+.It Xo Ic list
+.Xc
+List all tunnels, together with any dependencies and whether they are configured, currently open, and opened by the
+.Ic startup
+subcommand.
+.It Xo Ic hostname
+.Ar host
+.Xc
+Writes the value of the 
+.Ic HostName
+associated with
+.Ar host 
+to the standard output.
+.Pp
+Continuing with the previous examples,
+.Bd -ragged -offset indent
+topo hostname alpha-tunnel
+.Ed
+.Pp
+and
+.Bd -ragged -offset indent
+topo hostname beta
+.Ed
+.Pp
+write
+.Qq alpha
+and
+.Qq localhost
+respectively.
+.It Xo Ic port
+.Ar host
+.Xc
+Writes the value of the 
+.Ic Port
+associated with
+.Ar host 
+to the standard output.
+.Pp
+Continuing with the previous examples,
+.Bd -ragged -offset indent
+topo port alpha-tunnel
+.Ed
+.Pp
+and
+.Bd -ragged -offset indent
+topo port beta
+.Ed
+.Pp
+write
+.Qq 22
+and
+.Qq 2222
+respectively.
+.It Xo Ic version
+.Xc
+Writes information on the version of
+.Nm ,
+.Nm Tcl ,
+and the operating system to the standard output.
+.El
+.Sh SCRIPTS
+.Nm
+installs and maintains a menu named 
+.Qq Topo
+in the scripts menu which shows the status of the configured tunnels and allows them to be opened and closed.
+.Pp
+The menu has two principal submenus. 
+The 
+.Qq Open...
+submenu lists closed tunnels; selecting a closed tunnel opens it.
+The 
+.Qq Close...
+submenu lists open tunnels; selecting an open tunnel closes it. 
+The two submenus also contain 
+.Qq All
+entries which open or close all of the tunnels.
+.Pp
+While 
+.Nm
+works with both the standard Apple Script Menu, it
+works best with FastScripts
+.Pq Pa http://www.red-sweater.com/fastscripts/ ,
+which allows the menu entries to be presented in a convenient order.
+.Sh FILES
+.Bl -tag -width "/System/Library/LaunchDaemons" -compact
+.It Pa ~/.ssh/config
+The per-user ssh configuration file. Tunnel definitions are read by 
+.Nm
+from this file.
+.El
+.Sh SEE ALSO 
+.Xr ssh 1 ,
+.Xr ssh-agent 1 , 
+and
+.Xr ssh_config 5 .

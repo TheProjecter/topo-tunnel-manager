@@ -1,0 +1,679 @@
+#!/bin/sh
+#\
+umask 022; exec /usr/bin/tclsh "$0" "$@"
+
+# $Id$
+
+################################################################################
+
+# Copyright © 2012, Alan M. Watson. All rights reserved.
+# 
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are
+# met:
+# 
+# * Redistributions of source code must retain the above copyright
+# notice, this list of conditions and the following disclaimer.
+# 
+# * Redistributions in binary form must reproduce the above copyright
+# notice, this list of conditions and the following disclaimer in the
+# documentation and/or other materials provided with the distribution.
+# 
+# * The names of its contributors may not be used to endorse or promote
+# products derived from this software without specific prior written
+# permission.
+# 
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+# "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+# LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+# A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+# HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+# SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+# LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+# DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+# THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+# (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+# OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+################################################################################
+
+package require Tclx
+
+################################################################################
+
+# The version number also occurs in the Makefile, README.rtf, and Topo.pmdoc files.
+set version "0.0"
+
+################################################################################
+
+set logdir "$env(HOME)/.ssh/"
+
+################################################################################
+
+namespace eval host {
+
+  variable dict {}
+
+  proc set {key subkey value} {
+    variable dict
+    if {![dict exists $dict $key]} {
+      dict set dict $key {}
+    }
+    dict set dict $key $subkey $value
+  }
+
+  proc get {key subkey} {
+    variable dict
+    dict get $dict $key $subkey
+  }
+
+  proc exists {key {subkey ""}} {
+    variable dict
+    if {[string equal $subkey ""]} {
+      dict exists $dict $key
+    } else {
+      dict exists [dict get $dict $key] $subkey
+    }
+  }
+
+  proc keys {} {
+    variable dict
+    dict keys $dict
+  }
+
+}
+
+################################################################################
+
+namespace eval sshconfig {
+
+  proc getlines {file} {
+    set channel [open $file "r"]
+    set lines {}
+    while {true} {
+      set line [gets $channel]
+      if {[eof $channel]} {
+        break
+      }
+      set line [regsub -all {\t} $line " "]
+      set line [regsub -all {^ +} $line ""]
+      set line [regsub -all { +$} $line ""]
+      set line [regsub -all { +} $line " "]
+      lappend lines [split $line]
+    }
+    close $channel
+    return $lines
+  }
+
+  proc parse {} {
+  
+    set tunneldict {}
+
+    foreach line [getlines "$::env(HOME)/.ssh/config"] {
+      set keyword [string tolower [lindex $line 0]]
+      switch $keyword {
+        "host" {
+          set currenthosts [lrange $line 1 end]
+          foreach host $currenthosts {
+            host::set $host "configured" true
+            host::set $host "type" "ssh"
+          }
+        }
+        "hostname" -
+        "port" {
+          foreach host $currenthosts {
+            if {![host::exists $host $keyword]} {
+              host::set $host $keyword [lindex $line 1]
+            }
+          }
+        }
+        "#opentunnelatstartup" {
+          if {[string equal [lindex $line 1] "yes"]} {
+            foreach host $currenthosts {
+              if {![host::exists $host "openatstartup"]} {
+                host::set $host "openatstartup" true
+              }
+            }
+          } elseif {[string equal [lindex $line 1] "no"]} {
+            foreach host $currenthosts {
+              if {![host::exists $host "openatstartup"]} {
+                host::set $host "openatstartup" false
+              }
+            }
+          }
+        }
+        "localforward" {
+          set tunneledport [lindex $line 1]
+          if {[llength $currenthosts] != 1} {
+            fatalerror "tunnels must have only one host pattern."
+          }
+          set host $currenthosts
+          host::set $host "type" "tunnel"
+          dict set tunneldict $tunneledport $host
+        }
+      }
+    }
+  
+    foreach line [getlines "|launchctl list"] {
+      if {[regexp {^ssh-tunnel\..+} [lindex $line 2]]} {
+        set host [regsub {^ssh-tunnel\.} [lindex $line 2] ""]
+        host::set $host "open" true
+      }
+    }
+  
+    foreach host [host::keys] {
+      foreach {keyword value} [list \
+        "hostname"      $host \
+        "port"          22 \
+        "configured"    false \
+        "openatstartup" false \
+        "open"          false \
+      ] {
+        if {![host::exists $host $keyword]} {
+          host::set $host $keyword $value
+        }
+      }
+    }
+    
+    foreach host [host::keys] {
+      set hostname [host::get $host hostname]
+      set port     [host::get $host port]
+      if {![string equal $hostname "localhost"]} {
+        host::set $host "tunnel" ""
+      } elseif {[dict exists $tunneldict $port]} {
+        host::set $host "tunnel" [dict get $tunneldict $port]
+      } else {
+        fatalerror "no tunnel is defined for localhost:$port."
+      }
+    }
+  
+  }
+
+  parse
+  
+}  
+
+################################################################################
+
+proc ssh {argv} {
+  execl "/usr/bin/ssh" $argv
+}
+
+proc openurl {scheme host path} {
+  set hostname [host::get $host "hostname"]
+  set port [host::get $host "port"]
+  set url "$scheme://$hostname:$port/$path"
+  execl "/usr/bin/open" [list $url]
+}
+
+################################################################################
+
+proc waitforportforhost {host} {
+  set hostname [host::get $host "hostname"]
+  set port [host::get $host "port"]
+  while {[catch {socket $hostname $port} channel]} {
+    after 100
+  }
+  close $channel
+}
+
+proc opentunnelforhost {host} {
+  set tunnel [host::get $host "tunnel"]
+  if {![string equal $tunnel ""]} {
+    opentunnel $tunnel
+    waitforportforhost $host
+  }
+}
+
+proc opentunnel {tunnel} {
+  if {![host::get $tunnel "open"]} {
+    opentunnelforhost $tunnel
+    exec -ignorestderr -- \
+      "/bin/launchctl" "submit" "-l" "ssh-tunnel.$tunnel" \
+      "-e" "$::logdir/topo-log-$tunnel.txt" \
+       "--" \
+       "/usr/bin/ssh" "-N" "$tunnel"
+    host::set $tunnel "open" true
+  }
+}
+
+proc closetunnel {tunnel} {
+  if {[host::get $tunnel "open"]} {
+    exec -ignorestderr -- \
+      "/bin/launchctl" "remove" "ssh-tunnel.$tunnel"
+    host::set $tunnel "open" false
+  }
+}
+
+proc openalltunnels {} {
+  foreach host [host::keys] {
+    if {[string equal "tunnel" [host::get $host "type"]]} {
+      opentunnel $host
+    }
+  }
+}
+
+proc closealltunnels {} {
+  foreach host [host::keys] {
+    if {[string equal "tunnel" [host::get $host "type"]]} {
+      closetunnel $host
+    }
+  }
+}
+
+proc openstartuptunnels {} {
+  set opentunnels {}
+  foreach host [host::keys] {
+    if {[string equal "tunnel" [host::get $host "type"]] &&
+        [host::get $host "open"] && 
+        [host::get $host "configured"]} {
+      lappend opentunnels $host
+    }
+  }
+  foreach host [host::keys] {
+    if {[string equal "tunnel" [host::get $host "type"]]} {
+      closetunnel $host
+    }
+  }
+  foreach host [host::keys] {
+    if {[string equal "tunnel" [host::get $host "type"]] &&
+        [host::get $host "openatstartup"]} {
+      opentunnel $host
+    }
+  }
+  foreach host $opentunnels {
+    opentunnel $host
+  }
+}
+
+################################################################################
+
+proc yesorno {value} {
+  if {$value} {
+    return "yes"
+  } else {
+    return "no"
+  }
+}
+
+proc listsubcommand {subcommand argv} {
+  checkargc $subcommand $argv 0 0
+  set format "%-31s %-10s %-31s %-11s %-31s %-5s %s"
+  puts [format $format "Host" "Type" "Tunnel" "Configured?" "Host:Port" "Open?" "OpenAtStartup?"]
+  puts [format $format "====" "====" "======" "===========" "=========" "=====" "=============="]
+  foreach host [host::keys] {
+    switch [host::get $host "type"] {
+      "tunnel" {
+        puts [format $format \
+          $host \
+          [host::get $host "type"] \
+          [host::get $host "tunnel"] \
+          [yesorno [host::get $host "configured"]] \
+          [host::get $host "hostname"]:[host::get $host "port"] \
+          [yesorno [host::get $host "open"]] \
+          [yesorno [host::get $host "openatstartup"]] \
+        ]
+      }
+      "ssh"  {
+        puts [format $format \
+          $host \
+          [host::get $host "type"] \
+          [host::get $host "tunnel"] \
+          [yesorno [host::get $host "configured"]] \
+          [host::get $host "hostname"]:[host::get $host "port"] \
+    "" \
+    "" \
+        ]
+      }
+    }
+  }
+}
+
+proc hostnamesubcommand {subcommand argv} {
+  checkargc $subcommand $argv 1 1
+  set host [lindex $argv 0]
+  checkhostexists $host
+  checkhostconfigured $host
+  puts [host::get $host "hostname"]
+}
+
+proc portsubcommand {subcommand argv} {
+  checkargc $subcommand $argv 1 1
+  set host [lindex $argv 0]
+  checkhostexists $host
+  checkhostconfigured $host
+  puts [host::get $host "port"]
+}
+
+################################################################################
+
+set scriptdir "$env(HOME)/Library/Scripts/Topo"
+
+# From the FastScripts documentation:
+# 
+# Starting in version 2.2.5, FastScripts will arrange menu items in a
+# user-specified order based on a common convention followed by BBEdit
+# and others. If the file or folder name starts with any two characters
+# and a ')', then the characters are used to control the relative
+# placement of the item. For instance, a script named "AA)Zounds" will
+# show up as "Zounds" in the menu but be placed above an item named
+# "Apples". FastScripts will also respect the "menu separator"
+# convention - when a folder's name ends in "-***", its contents are
+# ignored and a menu separator line is inserted where its name would
+# ordinarily appear.
+# 
+# See http://www.red-sweater.com/RedSweater/FSFeatures.html
+# 
+# These features are not supported by the standard Apple Script Menu, so
+# we only use them if FastScripts is either running or is configured to
+# run at start up.
+
+set fastscriptsrunning [exec "/bin/sh" "-c" {
+  if /bin/launchctl list | /usr/bin/grep -q '\.com\.red-sweater\.FastScripts$'
+  then
+    echo true
+  else
+    echo false
+  fi
+}]
+
+set fastscriptsrunsatstartup [exec "/bin/sh" "-c" {
+  if /usr/bin/plutil -convert xml1 -o - \
+    $HOME/Library/Preferences/loginwindow.plist | \
+    /usr/bin/grep -q '<string>/Applications/FastScripts\.app</string>'
+  then
+    echo true
+  else
+    echo false
+  fi
+}]
+
+set fastscripts [expr {$fastscriptsrunning || $fastscriptsrunsatstartup}]
+
+proc scriptsubpath {subpath} {
+  global fastscripts
+  if {!$fastscripts} {
+    set subpath [regsub {^..\)} $subpath ""]
+    set subpath [regsub {/..\)} $subpath "/"]
+  }
+  return $subpath
+}
+
+proc makescript {subpath argv} {
+  global scriptdir
+  set path [file join $scriptdir [scriptsubpath $subpath]]
+  file mkdir [file dirname $path]
+  set channel [open $path "w" "0744"]
+  puts $channel "#!/bin/sh"
+  puts -nonewline $channel "exec /usr/bin/topo" 
+  foreach arg $argv {
+    puts -nonewline $channel " \"[regsub -all {[$'"`]} $arg {\\&}]\""
+  }
+  puts $channel ""
+  close $channel
+}
+
+proc makescriptseparator {subpath} {
+  global fastscripts
+  if {$fastscripts} {
+    global scriptdir
+    set path [file join $scriptdir "$subpath-***"]
+    file mkdir $path
+  }
+}
+
+proc makeaboutscript {subpath} {
+  global scriptdir
+  set path [file join $scriptdir [scriptsubpath $subpath]]
+  set channel [open "|/usr/bin/osacompile -o $path.scpt" "w"]
+  puts $channel {set u to "http://www.alan-watson.org/topo.html"}
+	puts $channel {set m to ¬}
+  puts $channel {  "Topo is a tool to manage Secure Shell (ssh) tunnels from the command line and the scripts menu.\n" & ¬}
+  puts $channel {  "\n" & ¬}
+  global version
+  puts $channel "  \"Version $version.\\n\" & ¬"
+  puts $channel {  "\n" & ¬}
+  puts $channel {  "Copyright © 2012 Alan M. Watson <alan@alan-watson.org>.\n"}
+  puts $channel {set r to display alert "Topo" as informational message m buttons {"Visit Web Site", "Close"}}
+  puts $channel {if button returned of r is "Visit Web Site" then}
+  puts $channel {	do shell script "/usr/bin/open " & quoted form of (u)}
+  puts $channel {end if}
+  close $channel
+}
+
+proc updatescripts {} {
+  global scriptdir
+  if {[file isdirectory $scriptdir]} {
+    exec "/bin/rm" "-rf" "$scriptdir"
+    foreach host [host::keys] {
+      if {[string equal [host::get $host "type"] "tunnel"] && 
+          [host::get $host "open"]} {
+        set prefix [regsub -- {-tunnel$} $host ""]
+        makescript "BB)Close.../AA)$prefix" [list close "$host"]
+      }
+    }
+    makescriptseparator "AA)Open.../BB)"
+    makescript          "AA)Open.../CC)All" [list "openall"]
+    foreach host [host::keys] {
+      if {[string equal [host::get $host "type"] "tunnel"] && 
+          ![host::get $host "open"] && 
+          [host::get $host "configured"]} {
+        set prefix [regsub -- {-tunnel$} $host ""]
+        makescript "AA)Open.../AA)$prefix" [list open $host]
+      }
+    }
+    makescriptseparator "BB)Close.../BB)"
+    makescript          "BB)Close.../CC)All" [list "closeall"]
+    makescriptseparator "CC)"
+    makescript          "DD)Restart" [list "startup"]
+    makeaboutscript     "EE)About"
+  }
+}
+
+proc activatescripts {} {
+  global scriptdir
+  exec "/bin/rm" "-rf" "$scriptdir"
+  file mkdir $scriptdir
+  updatescripts
+}
+
+proc deactivatescripts {} {
+  global scriptdir
+  exec "/bin/rm" "-rf" "$scriptdir"
+}
+
+################################################################################
+
+proc activatehelper {} {
+  exec "/usr/bin/defaults" \
+       "write" \
+       "loginwindow" \
+       "AutoLaunchedApplicationDictionary" \
+       "-array-add" \
+       "\{ \"Path\" = \"/Applications/TopoHelper.app\"; \"Hide\" = 1; \}"
+}
+
+################################################################################
+
+proc fatalerror {message} {
+  puts "topo: error: $message"
+  exit 1
+}
+
+################################################################################
+
+proc checkhostexists {host} {
+  if {![host::exists $host]} {
+    fatalerror "host \"$host\" does not exist."
+  }
+}
+
+proc checkhostconfigured {host} {
+  checkhostexists $host
+  if {![host::get $host "configured"]} {
+    fatalerror "host \"$host\" is not configured."
+  }
+}
+
+proc checkhostistunnel {host} {
+  checkhostexists $host
+  if {![string equal "tunnel" [host::get $host "type"]]} {
+    fatalerror "host \"$host\" is not a tunnel."
+  }
+}
+
+################################################################################
+
+proc opensubcommand {subcommand argv} {
+  checkargc $subcommand $argv 1 1
+  set host [lindex $argv 0]
+  checkhostexists $host
+  checkhostconfigured $host
+  switch [host::get $host "type"] {
+    "tunnel" {
+      opentunnel $host
+    }
+    default {
+      opentunnelforhost $host
+    }
+  }
+  updatescripts
+}
+
+proc openallsubcommand {subcommand argv} {
+  checkargc $subcommand $argv 0 0
+	openalltunnels
+	updatescripts
+}
+
+proc closesubcommand {subcommand argv} {
+  checkargc $subcommand $argv 1 1
+  set host [lindex $argv 0]
+  checkhostexists $host
+  checkhostconfigured $host
+  checkhostistunnel $host
+  closetunnel $host
+  updatescripts
+}
+
+proc closeallsubcommand {subcommand argv} {
+  checkargc $subcommand $argv 0 0
+  closealltunnels
+  updatescripts
+}
+
+proc sshsubcommand {subcommand argv} {
+  checkargc $subcommand $argv 1
+  set host [lindex $argv 0]
+  checkhostexists $host
+  checkhostconfigured $host
+  opentunnelforhost $host
+  ssh $argv
+}
+
+proc httpsubcommand {subcommand argv} {
+  checkargc $subcommand $argv 1 2
+  urlsubcommand $subcommand [concat "http" $argv]
+}
+
+proc httpssubcommand {subcommand argv} {
+  checkargc $subcommand $argv 1 2
+  urlsubcommand $subcommand [concat "https" $argv]
+}
+
+proc urlsubcommand {subcommand argv} {
+  checkargc $subcommand $argv 2 3
+  set scheme [lindex $argv 0]
+  set host [lindex $argv 1]
+  set path [lindex $argv 2]
+  checkhostexists $host
+  checkhostconfigured $host
+  opentunnelforhost $host
+  openurl $scheme $host $path
+}
+
+proc startupsubcommand {subcommand argv} {
+  checkargc $subcommand $argv 0 0
+	openstartuptunnels
+  updatescripts
+}
+
+proc versionsubcommand {subcommand argv} {
+  checkargc $subcommand $argv 0 0
+	global version
+	puts "Topo $version"
+	global tcl_patchLevel
+	puts "Tcl $tcl_patchLevel"
+	global tcl_platform
+	puts "OS $tcl_platform(os) $tcl_platform(osVersion) for $tcl_platform(machine)."
+}
+
+proc updatesubcommand {subcommand argv} {
+  checkargc $subcommand $argv 0 0
+  updatescripts
+}
+
+proc activatesubcommand {subcommand argv} {
+  checkargc $subcommand $argv 0 0
+	activatescripts
+	activatehelper
+	openstartuptunnels
+	updatescripts  
+}
+
+proc deactivatesubcommand {subcommand argv} {
+  checkargc $subcommand $argv 0 0
+  closealltunnels
+  deactivatescripts
+}
+
+proc checkargc {subcommand argv min {max ""}} {
+  set argc [llength $argv]
+  if {$argc < $min} {
+    fatalerror "$subcommand: too few arguments."
+  }
+  if {![string equal $max ""] && $argc > $max} {
+    fatalerror "$subcommand: too many arguments."
+  }
+}
+
+proc main {argv} {
+  global env
+  if {[catch {set SSH_AUTH_SOCK $env(SSH_AUTH_SOCK)}]} {
+    fatalerror "SSH_AUTH_SOCK is not set in the environment."
+  }
+  exec "/bin/launchctl" "setenv" "SSH_AUTH_SOCK" $SSH_AUTH_SOCK
+  if {[llength $argv] == 0} {
+    fatalerror "missing subcommand."
+  }
+  set subcommand [lindex $argv 0]
+  set argv [lrange $argv 1 end]
+  switch $subcommand {
+    "open" -
+    "close" -
+    "openall" -
+    "closeall" -
+    "ssh" -
+    "http" -
+    "https" -
+    "url" -
+    "startup" -
+    "list" -
+    "hostname" -
+    "port" -
+    "version" -
+    "update" -
+    "activate" - 
+    "deactivate" {
+      ${subcommand}subcommand $subcommand $argv
+    }
+    default {
+      fatalerror "invalid subcommand \"$subcommand\"."
+    }
+  }
+  exit 0
+}
+
+main $argv
+
+################################################################################
