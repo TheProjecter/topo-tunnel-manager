@@ -240,6 +240,47 @@ proc closetunnel {tunnel} {
   }
 }
 
+proc openalltunnels {} {
+  foreach host [host::keys] {
+    if {[string equal "tunnel" [host::get $host "type"]]} {
+      opentunnel $host
+    }
+  }
+}
+
+proc closealltunnels {} {
+  foreach host [host::keys] {
+    if {[string equal "tunnel" [host::get $host "type"]]} {
+      closetunnel $host
+    }
+  }
+}
+
+proc openstartuptunnels {} {
+  set opentunnels {}
+  foreach host [host::keys] {
+    if {[string equal "tunnel" [host::get $host "type"]] &&
+        [host::get $host "open"] && 
+        [host::get $host "configured"]} {
+      lappend opentunnels $host
+    }
+  }
+  foreach host [host::keys] {
+    if {[string equal "tunnel" [host::get $host "type"]]} {
+      closetunnel $host
+    }
+  }
+  foreach host [host::keys] {
+    if {[string equal "tunnel" [host::get $host "type"]] &&
+        [host::get $host "openatstartup"]} {
+      opentunnel $host
+    }
+  }
+  foreach host $opentunnels {
+    opentunnel $host
+  }
+}
+
 ################################################################################
 
 proc yesorno {value} {
@@ -470,12 +511,8 @@ proc opensubcommand {subcommand argv} {
 
 proc openallsubcommand {subcommand argv} {
   checkargc $subcommand $argv 0 0
-  foreach host [host::keys] {
-    if {[string equal "tunnel" [host::get $host "type"]]} {
-      opentunnel $host
-    }
-  }
-  updatescripts
+	openalltunnels
+	updatescripts
 }
 
 proc closesubcommand {subcommand argv} {
@@ -490,11 +527,7 @@ proc closesubcommand {subcommand argv} {
 
 proc closeallsubcommand {subcommand argv} {
   checkargc $subcommand $argv 0 0
-  foreach host [host::keys] {
-    if {[string equal "tunnel" [host::get $host "type"]]} {
-      closetunnel $host
-    }
-  }
+  closealltunnels
   updatescripts
 }
 
@@ -530,28 +563,7 @@ proc urlsubcommand {subcommand argv} {
 
 proc startupsubcommand {subcommand argv} {
   checkargc $subcommand $argv 0 0
-  set opentunnels {}
-  foreach host [host::keys] {
-    if {[string equal "tunnel" [host::get $host "type"]] &&
-        [host::get $host "open"] && 
-        [host::get $host "configured"]} {
-      lappend opentunnels $host
-    }
-  }
-  foreach host [host::keys] {
-    if {[string equal "tunnel" [host::get $host "type"]]} {
-      closetunnel $host
-    }
-  }
-  foreach host [host::keys] {
-    if {[string equal "tunnel" [host::get $host "type"]] &&
-        [host::get $host "openatstartup"]} {
-      opentunnel $host
-    }
-  }
-  foreach host $opentunnels {
-    opentunnel $host
-  }
+	openstartuptunnels
   updatescripts
 }
 
@@ -562,11 +574,14 @@ proc updatesubcommand {subcommand argv} {
 
 proc activatesubcommand {subcommand argv} {
   checkargc $subcommand $argv 0 0
-  activatescripts
+	activatescripts
+	openstartuptunnels
+	updatescripts  
 }
 
 proc deactivatesubcommand {subcommand argv} {
   checkargc $subcommand $argv 0 0
+  closealltunnels
   deactivatescripts
 }
 
