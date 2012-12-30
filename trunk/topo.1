@@ -126,6 +126,15 @@ Deactivation does three things: runs the
 subcommand; arranges to no longer run the
 .Ar startup
 subcommand at future logins; and removes the scripts menu.
+.It Xo Ar update
+.Xc
+Update the script menus.
+This subcommand should be run after editing the tunnel configurations in the
+.Pa ~/.ssh/config
+file. The scripts menu is also implicitly updated by all of the other subcommands except
+.Ar deactivate 
+and
+.Ar list .
 .It Xo Ar open
 .Ar host
 .Xc
@@ -231,18 +240,13 @@ For HTTP and HTTPS connections, the http and https subcommands are more concise.
 .It Xo Ar startup
 .Xc
 Open all tunnels whose definitions indicate (by use of the #TunnelOpenAtStartUp pseudo-keyword) that they should be opened by the
-.Nm startup
+.Ar startup
 subcommand.
 .It Xo Ar list
 .Xc
 List all tunnels, together with any dependencies and whether they are configured, currently open, and opened by the
-.Nm startup
+.Ar startup
 subcommand.
-.It Xo Ar installscripts
-.Xc
-Install scripts to interface to 
-.Nm
-in the scripts menu.
 .El
 .Sh FILES
 .Bl -tag -width "/System/Library/LaunchDaemons" -compact
