@@ -464,6 +464,17 @@ proc deactivatescripts {} {
 
 ################################################################################
 
+proc activatehelper {} {
+  exec "/usr/bin/defaults" \
+       "write" \
+       "loginwindow" \
+       "AutoLaunchedApplicationDictionary" \
+       "-array-add" \
+       "\{ \"Path\" = \"/Applications/TopoHelper.app\"; \"Hide\" = 1; \}"
+}
+
+################################################################################
+
 proc fatalerror {message} {
   puts "topo: error: $message"
   exit 1
@@ -575,6 +586,7 @@ proc updatesubcommand {subcommand argv} {
 proc activatesubcommand {subcommand argv} {
   checkargc $subcommand $argv 0 0
 	activatescripts
+	activatehelper
 	openstartuptunnels
 	updatescripts  
 }
