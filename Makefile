@@ -42,6 +42,10 @@ TopoHelper.app: TopoHelper.applescript
 	osacompile -o TopoHelper.app TopoHelper.applescript
 
 Topo.pkg: TopoHelper.app
+	rm -rf pkg
+	mkdir pkg
+	cp -pr topo topo.1 TopoHelper.app pkg
+	sudo chown -R root:wheel pkg/*
 	packagemaker -d Topo.pmdoc -o Topo.pkg
 
 Topo.dmg: Topo.pkg README.rtf LICENSE.rtf
