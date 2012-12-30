@@ -8,5 +8,5 @@ Topo is a tool for managing Secure Shell (ssh) tunnels from the command line and
 \
 You will be guided through the steps necessary to install Topo.\
 \
-This package contains version 0.0.\
+This package contains version 0.1.\
 }]]></resource><resource relative="true" mod="true" type="conclusion">Finish Up.rtf</resource></locale></resources><flags/><item type="file">01topo.xml</item><item type="file">02topo.xml</item><item type="file">03topohelper.xml</item><mod>properties.title</mod><mod>properties.customizeOption</mod><mod>description</mod><mod>properties.anywhereDomain</mod><mod>properties.systemDomain</mod></pkmkdoc>
