@@ -324,6 +324,22 @@ proc listsubcommand {subcommand argv} {
   }
 }
 
+proc hostnamesubcommand {subcommand argv} {
+  checkargc $subcommand $argv 1 1
+  set host [lindex $argv 0]
+  checkhostexists $host
+  checkhostconfigured $host
+  puts [host::get $host "hostname"]
+}
+
+proc portsubcommand {subcommand argv} {
+  checkargc $subcommand $argv 1 1
+  set host [lindex $argv 0]
+  checkhostexists $host
+  checkhostconfigured $host
+  puts [host::get $host "port"]
+}
+
 ################################################################################
 
 set scriptdir "$env(HOME)/Library/Scripts/Topo"
@@ -629,6 +645,8 @@ proc main {argv} {
     "url" -
     "startup" -
     "list" -
+    "hostname" -
+    "port" -
     "update" -
     "activate" - 
     "deactivate" {

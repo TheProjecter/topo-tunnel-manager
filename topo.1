@@ -320,6 +320,54 @@ subcommand.
 List all tunnels, together with any dependencies and whether they are configured, currently open, and opened by the
 .Ic startup
 subcommand.
+.It Xo Ic hostname
+.Ar host
+.Xc
+Writes the value of the 
+.Ic HostName
+associated with
+.Ar host 
+to the standard output.
+.Pp
+Continuing with the previous examples,
+.Bd -ragged -offset indent
+topo hostname alpha-tunnel
+.Ed
+.Pp
+and
+.Bd -ragged -offset indent
+topo hostname beta
+.Ed
+.Pp
+write
+.Qq alpha
+and
+.Qq localhost
+respectively.
+.It Xo Ic port
+.Ar host
+.Xc
+Writes the value of the 
+.Ic Port
+associated with
+.Ar host 
+to the standard output.
+.Pp
+Continuing with the previous examples,
+.Bd -ragged -offset indent
+topo port alpha-tunnel
+.Ed
+.Pp
+and
+.Bd -ragged -offset indent
+topo port beta
+.Ed
+.Pp
+write
+.Qq 22
+and
+.Qq 2222
+respectively.
 .El
 .Sh SCRIPTS
 .Nm
