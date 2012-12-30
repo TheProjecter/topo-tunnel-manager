@@ -104,6 +104,28 @@ commands it executes run with the
 environment variable set appropriately.
 .Sh SUBCOMMANDS
 .Bl -tag -width -indent
+.It Xo Ar activate
+.Xc
+Activate
+.Nm 
+for this user.
+Each user should run this subcommand once prior to using 
+.Nm .
+Activation does three things: runs the 
+.Ar startup 
+subcommand; arranges to run the 
+.Ar startup
+subcommand at future logins; and creates the scripts menu.
+.It Xo Ar deactivate
+.Xc
+Deactivate
+.Nm
+for this user.
+Deactivation does three things: runs the 
+.Ar closeall
+subcommand; arranges to no longer run the
+.Ar startup
+subcommand at future logins; and removes the scripts menu.
 .It Xo Ar open
 .Ar host
 .Xc
