@@ -41,6 +41,7 @@ package require Tclx
 
 ################################################################################
 
+# The version number also occurs in the README.rtf and Topo.pmdoc files.
 set version "0.0"
 
 ################################################################################
