@@ -380,7 +380,7 @@ end if
   close $channel
 }
 
-proc refreshscriptmenus {} {
+proc updatescripts {} {
   global scriptdir
   if {[file isdirectory $scriptdir]} {
     exec "/bin/rm" "-rf" "$scriptdir"
@@ -409,11 +409,16 @@ proc refreshscriptmenus {} {
   }
 }
 
-proc installscripts {} {
+proc activatescripts {} {
   global scriptdir
   exec "/bin/rm" "-rf" "$scriptdir"
   file mkdir $scriptdir
-  refreshscriptmenus
+  updatescripts
+}
+
+proc deactivatescripts {} {
+  global scriptdir
+  exec "/bin/rm" "-rf" "$scriptdir"
 }
 
 ################################################################################
@@ -460,7 +465,7 @@ proc opensubcommand {subcommand argv} {
       opentunnelforhost $host
     }
   }
-  refreshscriptmenus
+  updatescripts
 }
 
 proc openallsubcommand {subcommand argv} {
@@ -470,7 +475,7 @@ proc openallsubcommand {subcommand argv} {
       opentunnel $host
     }
   }
-  refreshscriptmenus
+  updatescripts
 }
 
 proc closesubcommand {subcommand argv} {
@@ -480,7 +485,7 @@ proc closesubcommand {subcommand argv} {
   checkhostconfigured $host
   checkhostistunnel $host
   closetunnel $host
-  refreshscriptmenus
+  updatescripts
 }
 
 proc closeallsubcommand {subcommand argv} {
@@ -490,7 +495,7 @@ proc closeallsubcommand {subcommand argv} {
       closetunnel $host
     }
   }
-  refreshscriptmenus
+  updatescripts
 }
 
 proc sshsubcommand {subcommand argv} {
@@ -547,12 +552,22 @@ proc startupsubcommand {subcommand argv} {
   foreach host $opentunnels {
     opentunnel $host
   }
-  refreshscriptmenus
+  updatescripts
 }
 
-proc installscriptssubcommand {subcommand argv} {
+proc updatesubcommand {subcommand argv} {
   checkargc $subcommand $argv 0 0
-  installscripts
+  updatescripts
+}
+
+proc activatesubcommand {subcommand argv} {
+  checkargc $subcommand $argv 0 0
+  activatescripts
+}
+
+proc deactivatesubcommand {subcommand argv} {
+  checkargc $subcommand $argv 0 0
+  deactivatescripts
 }
 
 proc checkargc {subcommand argv min {max ""}} {
@@ -587,7 +602,9 @@ proc main {argv} {
     "url" -
     "startup" -
     "list" -
-    "installscripts" {
+    "update" -
+    "activate" - 
+    "deactivate" {
       ${subcommand}subcommand $subcommand $argv
     }
     default {
