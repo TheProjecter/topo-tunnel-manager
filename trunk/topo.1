@@ -111,7 +111,7 @@ Dependencies are determined from the local port number.
 This means that local ports must be uniquely assigned to tunneled hosts.
 .Pp
 Tunnels can be opened at start up by including a 
-.Ic #TunnelOpenAtStartUp
+.Ic #OpenTunnelAtStartUp
 pseudo-keyword in their 
 .Ic Host
 section with a value of 
@@ -123,7 +123,7 @@ As with standard keywords, the interpretation of this pseudo-keyword is not sens
 section indicates that beta-tunnel (and any dependent tunnels) should be opened at start up.
 .Bd -literal -offset indent
 Host beta-tunnel
-  #TunnelOpenAtStartUp yes
+  #OpenTunnelAtStartUp yes
   HostName localhost
   Port 2222
   LocalForward 2223 delta:22
@@ -312,7 +312,7 @@ and
 subcommands are more concise.
 .It Xo Ic startup
 .Xc
-Open all tunnels whose definitions indicate (by use of the #TunnelOpenAtStartUp pseudo-keyword) that they should be opened by the
+Open all tunnels whose definitions indicate (by use of the #OpenTunnelAtStartUp pseudo-keyword) that they should be opened by the
 .Ic startup
 subcommand.
 .It Xo Ic list
