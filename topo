@@ -41,6 +41,10 @@ package require Tclx
 
 ################################################################################
 
+set version "0.0"
+
+################################################################################
+
 set logdir "$env(HOME)/.ssh/"
 
 ################################################################################
@@ -594,6 +598,16 @@ proc startupsubcommand {subcommand argv} {
   updatescripts
 }
 
+proc versionsubcommand {subcommand argv} {
+  checkargc $subcommand $argv 0 0
+	global version
+	puts "Topo $version"
+	global tcl_patchLevel
+	puts "Tcl $tcl_patchLevel"
+	global tcl_platform
+	puts "OS $tcl_platform(os) $tcl_platform(osVersion) for $tcl_platform(machine)."
+}
+
 proc updatesubcommand {subcommand argv} {
   checkargc $subcommand $argv 0 0
   updatescripts
@@ -647,6 +661,7 @@ proc main {argv} {
     "list" -
     "hostname" -
     "port" -
+    "version" -
     "update" -
     "activate" - 
     "deactivate" {
