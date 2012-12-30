@@ -33,24 +33,26 @@
 
 ################################################################################
 
-all: Topo.dmg
+VERSION=0.0
+
+all: Topo\ $(VERSION).dmg
 
 clean:
-	rm -rf TopoHelper.app Topo.pkg Topo.dmg
+	rm -rf TopoHelper.app Topo*.pkg Topo*.dmg
 
 TopoHelper.app: TopoHelper.applescript
 	osacompile -o TopoHelper.app TopoHelper.applescript
 
-Topo.pkg: TopoHelper.app
-	rm -rf pkg
+Topo\ $(VERSION).pkg: TopoHelper.app
+	sudo rm -rf pkg
 	mkdir pkg
 	cp -pr topo topo.1 TopoHelper.app pkg
 	sudo chown -R root:wheel pkg/*
-	packagemaker -d Topo.pmdoc -o Topo.pkg
+	packagemaker -d Topo.pmdoc -o Topo\ $(VERSION).pkg
 
-Topo.dmg: Topo.pkg README.rtf LICENSE.rtf
+Topo\ $(VERSION).dmg: Topo\ $(VERSION).pkg README.rtf LICENSE.rtf
 	rm -rf dmg
-	mkdir -p dmg/Topo
-	cp -r Topo.pkg README.rtf LICENSE.rtf dmg/Topo
-	hdiutil create Topo.dmg -srcfolder dmg/Topo -ov
+	mkdir -p dmg/Topo\ $(VERSION)
+	cp -r Topo\ $(VERSION).pkg README.rtf LICENSE.rtf dmg/Topo\ $(VERSION)
+	hdiutil create Topo\ $(VERSION).dmg -srcfolder dmg/Topo\ $(VERSION) -ov
 	rm -rf dmg
