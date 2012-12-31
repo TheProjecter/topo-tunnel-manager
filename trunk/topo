@@ -155,8 +155,8 @@ namespace eval sshconfig {
     }
   
     foreach line [getlines "|launchctl list"] {
-      if {[regexp {^ssh-tunnel\..+} [lindex $line 2]]} {
-        set host [regsub {^ssh-tunnel\.} [lindex $line 2] ""]
+      if {[regexp {^org\.alan-watson\.topo\..+} [lindex $line 2]]} {
+        set host [regsub {^org\.alan-watson\.topo\.} [lindex $line 2] ""]
         host::set $host "open" true
       }
     }
@@ -229,7 +229,7 @@ proc opentunnel {tunnel} {
   if {![host::get $tunnel "open"]} {
     opentunnelforhost $tunnel
     exec -ignorestderr -- \
-      "/bin/launchctl" "submit" "-l" "ssh-tunnel.$tunnel" \
+      "/bin/launchctl" "submit" "-l" "org.alan-watson.topo.$tunnel" \
       "-e" "$::logdir/topo-log-$tunnel.txt" \
        "--" \
        "/usr/bin/ssh" "-N" "$tunnel"
@@ -240,7 +240,7 @@ proc opentunnel {tunnel} {
 proc closetunnel {tunnel} {
   if {[host::get $tunnel "open"]} {
     exec -ignorestderr -- \
-      "/bin/launchctl" "remove" "ssh-tunnel.$tunnel"
+      "/bin/launchctl" "remove" "org.alan-watson.topo.$tunnel"
     host::set $tunnel "open" false
   }
 }
