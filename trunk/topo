@@ -444,7 +444,7 @@ proc makeaboutscript {subpath} {
 proc updatescripts {} {
   global scriptdir
   if {[file isdirectory $scriptdir]} {
-    exec "/bin/rm" "-rf" "$scriptdir"
+    exec "/bin/rm" "-rf" "$scriptdir/*"
     foreach host [host::keys] {
       if {[string equal [host::get $host "type"] "tunnel"] && 
           [host::get $host "open"]} {
@@ -472,8 +472,10 @@ proc updatescripts {} {
 
 proc activatescripts {} {
   global scriptdir
-  exec "/bin/rm" "-rf" "$scriptdir"
-  file mkdir $scriptdir
+  if {![file isdirectory $scriptdir]} {
+	  exec "/bin/rm" "-rf" "$scriptdir"
+	  file mkdir $scriptdir
+	}
   updatescripts
 }
 
