@@ -467,7 +467,7 @@ proc updatescripts {} {
     makescriptseparator "BB)Close.../BB)"
     makescript          "BB)Close.../CC)All" [list "closeall"]
     makescriptseparator "CC)"
-    makescript          "DD)Restart" [list "startup"]
+    makescript          "DD)Update" [list "update"]
     makeaboutscript     "EE)About"
   }
 }
