@@ -1,4 +1,4 @@
-#summary An overview of the implementation of Topo
+#summary Notes on the implementation of Topo
 
 = Implementation Notes =
 
@@ -12,11 +12,11 @@ The executable parses ~/.ssh/config and creates a dictionary of hosts and tunnel
 
 The executable makes use of the Mac OS X [https://developer.apple.com/library/mac/#documentation/Darwin/Reference/ManPages/man8/launchd.8.html launchd] process manager through the  [http://developer.apple.com/library/mac/#documentation/Darwin/Reference/ManPages/man1/launchctl.1.html launchctl] interface. This dependence is one of the main impediments to porting Topo to other operating systems. Specifically:
 
- * It determines if a tunnel is open by looking for a job labelled "ssh-tunnel._tunnel_".
+ * It determines if a tunnel is open by looking for a job labelled "org.alan-watson.topo._tunnel_".
 
- * To open a tunnel, it submits a ssh command labelled "ssh-tunnel._tunnel_". Since launched restarts jobs that exit, this ensures that the tunnel will attempt to reconnect if for some reason the ssh command exits.
+ * To open a tunnel, it submits a ssh command labelled "org.alan-watson.topo._tunnel_". Since launched restarts jobs that exit, this ensures that the tunnel will attempt to reconnect if for some reason the ssh command exits.
 
- * To close a tunnel, it removes the job labelled "ssh-tunnel._tunnel_".
+ * To close a tunnel, it removes the job labelled "org.alan-watson.topo._tunnel_".
 
 After most subcommands, the topo executable updates the script menus.
 
